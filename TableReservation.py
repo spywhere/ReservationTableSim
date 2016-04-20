@@ -12,19 +12,19 @@ food_shops = [
     {
         "name": "Drink",
         "serving_time": 1,
-        "eating_time": [1, 2]
+        "eating_time": [3, 4]
     }, {
         "name": "Rice",
         "serving_time": 2,
-        "eating_time": [4, 5, 6, 7]
+        "eating_time": [5, 6, 7, 8]
     }, {
         "name": "Noodle",
         "serving_time": 3,
-        "eating_time": [4, 5, 6, 7]
+        "eating_time": [5, 6, 7, 8]
     }, {
         "name": "Suki",
         "serving_time": 3,
-        "eating_time": [5, 6, 7, 8]
+        "eating_time": [6, 7, 8, 9]
     }
 ]
 
@@ -69,7 +69,7 @@ flow_speed = [1, 2, 2, 3, 3, 4, 5]
 #   2 persons possibility: 2/7
 #   3 persons possibility: 1/7
 #   4 persons possibility: 1/7
-group_sizes = [1, 1, 1, 2, 2, 3, 4]
+group_sizes = [1, 1, 1, 2, 2, 3, 4, 5, 6]
 
 ################################################################################
 
@@ -82,6 +82,10 @@ name_list = [
 wait_queues = []
 last_group_size = 0
 next_group = None
+maximum = {
+    "waiting_time": 0,
+    "occupied_tables": 0
+}
 
 while True:
     #################
@@ -90,6 +94,8 @@ while True:
     # Clear screen
     print("\n" * 80)
 
+    print("Maximum waiting time: %.2fs" % (maximum["waiting_time"]))
+    print("Maximum occupied tables: %s" % (maximum["occupied_tables"]))
     next_group_time_diff = next_group - time.time() if next_group else 0
     print("Next group in %.2fs (last group is %s people)" % (
         next_group_time_diff if next_group_time_diff > 0 else 0,
@@ -119,12 +125,14 @@ while True:
     else:
         print("No one waiting for the table...")
     for index, table in enumerate(tables):
-        print("Table %s : %s people occupied%s" % (
+        print("Table %s : %s people occupied%s%s" % (
             index + 1,
             len(table["occupations"]) if "occupations" in table else 0,
             (
                 " [Group: %8s]" % (table["occupations"][0]["group_id"][-8:])
-            ) if "occupations" in table else ""
+            ) if "occupations" in table else "",
+            " Waiting for someone in shop..."
+            if "someone_in_shop" in table and table["someone_in_shop"] else ""
         ))
         remaining_seats = table["capacity"]
         if "occupations" in table:
@@ -147,7 +155,6 @@ while True:
     ########
     # Flow #
     ########
-
     # New group is came
     if not next_group or next_group - time.time() <= 0:
         last_group_size = random.choice(group_sizes)
@@ -228,9 +235,10 @@ while True:
                 occupation["eating_end"] = (
                     time.time() + occupation["eating_duration"]
                 )
+                everyone_is_done = False
         # If someone still in the shop queues
+        someone_in_shop = False
         if has_free_seat and group_id:
-            someone_in_shop = False
             for shop in [s for s in food_shops if "queues" in s]:
                 for queue in shop["queues"]:
                     if queue["group_id"] == group_id:
@@ -238,9 +246,24 @@ while True:
                         break
                 if someone_in_shop:
                     break
-        if everyone_is_done and not someone_in_shop:
+        table["someone_in_shop"] = someone_in_shop
+        if everyone_is_done and not (someone_in_shop and has_free_seat):
+            del table["someone_in_shop"]
             del table["occupations"]
 
+    # Calculate maximum
+    if wait_queues:
+        wait_time = time.time() - (
+            wait_queues[0]["queue_time"]
+            if "queue_time" in wait_queues[0] else time.time()
+        )
+        if maximum["waiting_time"] < wait_time:
+            maximum["waiting_time"] = wait_time
+    maximum_tables = len([
+        t for t in tables if "occupations" in t and len(t["occupations"]) > 0
+    ])
+    if maximum["occupied_tables"] < maximum_tables:
+        maximum["occupied_tables"] = maximum_tables
 
     #########
     # Delay #
